@@ -27,6 +27,8 @@ console.log('Covariance Matrix: ', covarianceMatrix)
 
 var svd = numeric.svd(covarianceMatrix)
 
+console.log('Singular value decomposition: ', svd)
+
 var squareRootCovarianceMatrix = numeric.dot(svd.U, numeric.diag(numeric.sqrt(svd.S)))
 
 console.log('Square root of the covariance matrix: ', squareRootCovarianceMatrix)
