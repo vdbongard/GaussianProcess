@@ -12,7 +12,7 @@ function squaredExponentialKernel (x, y) {
 }
 
 var length = 21
-var samplePoints = d3.range(length).map(function (d) { return d / (length - 1) })
+var n = length
 
 var covarianceMatrix = []
 
@@ -23,13 +23,21 @@ for (var i = 0; i < length; i++) {
   }
 }
 
+console.log('Covariance Matrix: ', covarianceMatrix)
+
 var svd = numeric.svd(covarianceMatrix)
 
-var proj = numeric.dot(svd.U, numeric.diag(numeric.sqrt(svd.S)))
+var squareRootCovarianceMatrix = numeric.dot(svd.U, numeric.diag(numeric.sqrt(svd.S)))
+
+console.log('Square root of the covariance matrix: ', squareRootCovarianceMatrix)
+
 var z = randnArray(length);
 
-var datay = numeric.dot(proj, z);
+console.log('z is an array of normally distributed values: ', z)
 
+var datay = numeric.dot(squareRootCovarianceMatrix, z);
+
+console.log('Data points y: ', datay)
 
 // 2. Use the margin convention practice
 var margin = {top: 50, right: 50, bottom: 50, left: 50}
@@ -37,7 +45,7 @@ var margin = {top: 50, right: 50, bottom: 50, left: 50}
   , height = window.innerHeight - margin.top - margin.bottom // Use the window's height
 
 // The number of datapoints
-var n = 21
+// var n = 21
 
 // 5. X scale will use the index of our data
 var xScale = d3.scaleLinear()
@@ -46,7 +54,7 @@ var xScale = d3.scaleLinear()
 
 // 6. Y scale will use the randomly generate number
 var yScale = d3.scaleLinear()
-  .domain([-2, 2]) // input
+  .domain([-4, 4]) // input
   .range([height, 0]) // output
 
 // 7. d3's line generator
@@ -55,7 +63,6 @@ var line = d3.line()
   .y(function (d) { return yScale(d.y) }) // set the y values for the line generator
 
 // 8. An array of objects of length N. Each object has key -> value pair, the key being "y" and the value is a random number
-// var dataset = d3.range(n).map(function(d, i) { return {"y": (i / (n-1))+0.1 } })
 var dataset = d3.range(n).map(function (d, i) { return {'y': datay[i]} })
 
 // 1. Add the SVG to the page and employ #2
