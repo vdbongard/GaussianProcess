@@ -7,11 +7,12 @@ function randnArray(size){
 }
 
 function squaredExponentialKernel (x, y) {
-  var l = 1
-  return Math.exp(-0.5 * (Math.pow(x - y, 2) / Math.pow(l, 2)))
+  var l = 4
+  var sigma = 1
+  return Math.pow(sigma, 2)*Math.exp(-0.5 * (Math.pow(x - y, 2) / Math.pow(l, 2)))
 }
 
-var length = 21
+var length = 40
 var n = length
 
 var covarianceMatrix = []
@@ -92,10 +93,10 @@ svg.append('path')
   .attr('d', line) // 11. Calls the line generator
 
 // 12. Appends a circle for each datapoint
-svg.selectAll('.dot')
-  .data(dataset)
-  .enter().append('circle') // Uses the enter().append() method
-  .attr('class', 'dot') // Assign a class for styling
-  .attr('cx', function (d, i) { return xScale(i) })
-  .attr('cy', function (d) { return yScale(d.y) })
-  .attr('r', 5)
+// svg.selectAll('.dot')
+//   .data(dataset)
+//   .enter().append('circle') // Uses the enter().append() method
+//   .attr('class', 'dot') // Assign a class for styling
+//   .attr('cx', function (d, i) { return xScale(i) })
+//   .attr('cy', function (d) { return yScale(d.y) })
+//   .attr('r', 5)
