@@ -1,24 +1,23 @@
-function randnArray(size){
-  var zs = new Array(size);
-  for (var i = 0; i < size; i++) {
-    zs[i] = d3.randomNormal()();
+function randnArray (size) {
+  const zs = new Array(size)
+  for (let i = 0; i < size; i++) {
+    zs[i] = d3.randomNormal()()
   }
-  return zs;
+  return zs
 }
 
 function squaredExponentialKernel (x, y) {
-  var l = 4
-  var sigma = 1
-  return Math.pow(sigma, 2)*Math.exp(-0.5 * (Math.pow(x - y, 2) / Math.pow(l, 2)))
+  const l = 4
+  const sigma = 1
+  return Math.pow(sigma, 2) * Math.exp(-0.5 * (Math.pow(x - y, 2) / Math.pow(l, 2)))
 }
 
-var length = 40
-var n = length
+const length = 41
 
-var covarianceMatrix = []
+const covarianceMatrix = []
 
-for (var i = 0; i < length; i++) {
-  for (var j = 0; j < length; j++) {
+for (let i = 0; i < length; i++) {
+  for (let j = 0; j < length; j++) {
     if (covarianceMatrix[i] === undefined) covarianceMatrix[i] = []
     covarianceMatrix[i][j] = squaredExponentialKernel(i, j)
   }
@@ -26,77 +25,104 @@ for (var i = 0; i < length; i++) {
 
 console.log('Covariance Matrix: ', covarianceMatrix)
 
-var svd = numeric.svd(covarianceMatrix)
+const svd = numeric.svd(covarianceMatrix)
 
 console.log('Singular value decomposition: ', svd)
 
-var squareRootCovarianceMatrix = numeric.dot(svd.U, numeric.diag(numeric.sqrt(svd.S)))
+const squareRootCovarianceMatrix = numeric.dot(svd.U, numeric.diag(numeric.sqrt(svd.S)))
 
 console.log('Square root of the covariance matrix: ', squareRootCovarianceMatrix)
 
-var z = randnArray(length);
+const z = randnArray(length)
 
 console.log('z is an array of normally distributed values: ', z)
 
-var datay = numeric.dot(squareRootCovarianceMatrix, z);
+const dataY = numeric.dot(squareRootCovarianceMatrix, z)
 
-console.log('Data points y: ', datay)
+console.log('Data points y: ', dataY)
 
-// 2. Use the margin convention practice
-var margin = {top: 50, right: 50, bottom: 50, left: 50}
-  , width = window.innerWidth - margin.left - margin.right // Use the window's width
-  , height = window.innerHeight - margin.top - margin.bottom // Use the window's height
+class Graph {
+  constructor (xLeft, xRight, yTop, yBottom) {
+    this.marginAll = 50
+    this.margin = {top: this.marginAll, right: this.marginAll, bottom: this.marginAll, left: this.marginAll}
+    this.width = window.innerWidth - this.margin.left - this.margin.right
+    this.height = window.innerHeight - this.margin.top - this.margin.bottom
+    this.xLeft = xLeft
+    this.xRight = xRight
+    this.xRange = Math.abs(this.xLeft) + Math.abs(this.xRight)
+    this.yTop = yTop
+    this.yBottom = yBottom
+    this.yRange = Math.abs(this.yTop) + Math.abs(this.yBottom)
+    this.xScale = d3.scaleLinear().domain([this.xLeft, this.xRight]).range([0, this.width])
+    this.yScale = d3.scaleLinear().domain([this.yBottom, this.yTop]).range([this.height, 0])
+    this.svg = d3.select('body').append('svg')
+      .attr('width', this.width + this.margin.left + this.margin.right)
+      .attr('height', this.height + this.margin.top + this.margin.bottom)
+      .append('g')
+      .attr('transform', 'translate(' + this.margin.left + ',' + this.margin.top + ')')
 
-// The number of datapoints
-// var n = 21
+    this.init()
+  }
 
-// 5. X scale will use the index of our data
-var xScale = d3.scaleLinear()
-  .domain([0, n - 1]) // input
-  .range([0, width]) // output
+  init () {
+    this.svg.append('g')
+      .attr('class', 'x axis')
+      .attr('transform', 'translate(0,' + this.height + ')')
+      .call(d3.axisBottom(this.xScale))
 
-// 6. Y scale will use the randomly generate number
-var yScale = d3.scaleLinear()
-  .domain([-4, 4]) // input
-  .range([height, 0]) // output
+    this.svg.append('g')
+      .attr('class', 'y axis')
+      .call(d3.axisLeft(this.yScale))
+  }
 
-// 7. d3's line generator
-var line = d3.line()
-  .x(function (d, i) { return xScale(i) }) // set the x values for the line generator
-  .y(function (d) { return yScale(d.y) }) // set the y values for the line generator
+  drawLine (data, xLeft, xRight) {
+    const n = data.length
+    const range = Math.abs(xLeft) + Math.abs(xRight)
+    const dataSet = d3.range(n).map(function (i) { return {'y': data[i]} })
 
-// 8. An array of objects of length N. Each object has key -> value pair, the key being "y" and the value is a random number
-var dataset = d3.range(n).map(function (d, i) { return {'y': datay[i]} })
+    const line = d3.line()
+      .x((d, i) => { return this.xScale(i / (n - 1) * range + xLeft) })
+      .y((d) => { return this.yScale(d.y) })
 
-// 1. Add the SVG to the page and employ #2
-var svg = d3.select('body').append('svg')
-  .attr('width', width + margin.left + margin.right)
-  .attr('height', height + margin.top + margin.bottom)
-  .append('g')
-  .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')')
+    this.svg.append('path')
+      .datum(dataSet)
+      .attr('class', 'line')
+      .attr('d', line)
+  }
 
-// 3. Call the x axis in a group tag
-svg.append('g')
-  .attr('class', 'x axis')
-  .attr('transform', 'translate(0,' + height + ')')
-  .call(d3.axisBottom(xScale)) // Create an axis component with d3.axisBottom
+  drawMousePoint (x, y) {
+    // check bounds
+    if (x < this.margin.left
+      || x > this.margin.left + this.width
+      || y < this.margin.top
+      || y > this.margin.top + this.height) return
 
-// 4. Call the y axis in a group tag
-svg.append('g')
-  .attr('class', 'y axis')
-  .call(d3.axisLeft(yScale)) // Create an axis component with d3.axisLeft
+    const newX = (x - this.margin.left) / this.width * this.xRange + this.xLeft
+    const newY = -((y - this.margin.top) / this.height * this.yRange + this.yBottom)
 
-// 9. Append the path, bind the data, and call the line generator
-svg.append('path')
-  .datum(dataset) // 10. Binds data to the line
-  .attr('class', 'line') // Assign a class for styling
-  .attr('d', line) // 11. Calls the line generator
+    this.drawPoint(newX, newY)
+  }
 
-// 12. Appends a circle for each datapoint
-// svg.selectAll('.dot')
-//   .data(dataset)
-//   .enter().append('circle') // Uses the enter().append() method
-//   .attr('class', 'dot') // Assign a class for styling
-//   .attr('cx', function (d, i) { return xScale(i) })
-//   .attr('cy', function (d) { return yScale(d.y) })
-//   .attr('r', 5)
+  drawPoint (x, y) {
+    this.svg.selectAll()
+      .data([{x, y}])
+      .enter().append('circle')
+      .attr('class', 'dot')
+      .attr('cx', (d) => { return this.xScale(d.x) })
+      .attr('cy', (d) => { return this.yScale(d.y) })
+      .attr('r', 4)
+  }
+}
+
+const xLeft = -5
+const xRight = 5
+
+const graph = new Graph(xLeft, xRight, 3, -3)
+
+graph.drawLine(dataY, xLeft, xRight)
+
+graph.drawPoint(2, 2.5)
+graph.drawPoint(0, 1.111)
+graph.drawPoint(-2, -1.4234)
+
+document.querySelector('svg').addEventListener('click', (event) => graph.drawMousePoint(event.offsetX, event.offsetY))
