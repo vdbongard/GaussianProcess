@@ -7,19 +7,28 @@ function randnArray (size) {
 }
 
 function squaredExponentialKernel (x, y) {
-  const l = 4
+  const l = 1
   const sigma = 1
   return Math.pow(sigma, 2) * Math.exp(-0.5 * (Math.pow(x - y, 2) / Math.pow(l, 2)))
 }
 
-const length = 41
+const steps = 200
+const covarianceMatrix = new Array(steps)
+const xLeft = -5
+const xRight = 5
+const range = Math.abs(xLeft) + Math.abs(xRight)
 
-const covarianceMatrix = []
+for (let i = 0; i < steps; i++) {
+  covarianceMatrix[i] = new Array(steps) // initialize the two dimensional array
+}
 
-for (let i = 0; i < length; i++) {
-  for (let j = 0; j < length; j++) {
-    if (covarianceMatrix[i] === undefined) covarianceMatrix[i] = []
-    covarianceMatrix[i][j] = squaredExponentialKernel(i, j)
+for (let i = 0; i < steps; i++) {
+  for (let j = i; j < steps; j++) {
+    const covariance = squaredExponentialKernel(i / (steps - 1) * range + xLeft, j / (steps - 1) * range + xLeft)
+    covarianceMatrix[i][j] = covariance
+    if (i !== j) {
+      covarianceMatrix[j][i] = covariance // symmetric matrix so we only need to calculate one triangle of the matrix
+    }
   }
 }
 
@@ -33,7 +42,7 @@ const squareRootCovarianceMatrix = numeric.dot(svd.U, numeric.diag(numeric.sqrt(
 
 console.log('Square root of the covariance matrix: ', squareRootCovarianceMatrix)
 
-const z = randnArray(length)
+const z = randnArray(steps)
 
 console.log('z is an array of normally distributed values: ', z)
 
@@ -75,7 +84,7 @@ class Graph {
       .call(d3.axisLeft(this.yScale))
   }
 
-  drawLine (data, xLeft, xRight) {
+  drawLine (data, xLeft, xRight, showDots) {
     const n = data.length
     const range = Math.abs(xLeft) + Math.abs(xRight)
     const dataSet = d3.range(n).map(function (i) { return {'y': data[i]} })
@@ -88,6 +97,16 @@ class Graph {
       .datum(dataSet)
       .attr('class', 'line')
       .attr('d', line)
+
+    if (showDots) {
+      this.svg.selectAll('.dot')
+        .data(dataSet)
+        .enter().append('circle')
+        .attr('class', 'dot')
+        .attr('cx', (d, i) => { return this.xScale(i / (n - 1) * range + xLeft) })
+        .attr('cy', (d) => { return this.yScale(d.y) })
+        .attr('r', 5)
+    }
   }
 
   drawMousePoint (x, y) {
@@ -114,15 +133,8 @@ class Graph {
   }
 }
 
-const xLeft = -5
-const xRight = 5
-
 const graph = new Graph(xLeft, xRight, 3, -3)
 
-graph.drawLine(dataY, xLeft, xRight)
-
-graph.drawPoint(2, 2.5)
-graph.drawPoint(0, 1.111)
-graph.drawPoint(-2, -1.4234)
+graph.drawLine(dataY, xLeft, xRight, true)
 
 document.querySelector('svg').addEventListener('click', (event) => graph.drawMousePoint(event.offsetX, event.offsetY))
