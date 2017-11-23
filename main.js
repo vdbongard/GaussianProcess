@@ -5,61 +5,127 @@ class GaussianProcess {
     this.xRight = 5
     this.yTop = 3
     this.yBottom = -3
-    this.covarianceMatrix = new Array(this.steps)
+    this.covarianceMatrix = []
     this.graph = new Graph(this.xLeft, this.xRight, this.yTop, this.yBottom)
     this.testingPointsX = numeric.linspace(this.xLeft, this.xRight, this.steps)
+    this.trainingPointsX = []
+    this.trainingPointsY = []
+    this.mu = []
+    this.sd95 = []
+    this.proj = []
 
     this.init()
   }
 
   init () {
     this.initCovarianceMatrix()
-    this.initMeanAndInterval()
-    this.sampleFromPrior()
+    this.computeProjection(0, 0, 0)
+    this.drawMeanAndInterval()
+    this.sample()
 
-    d3.select('body').append('button').text('Sample').on('click', () => this.sampleFromPrior())
+    d3.select('body').append('button').text('Sample').on('click', this.sample.bind(this))
 
-    document.querySelector('svg').addEventListener('click', (event) => this.graph.drawMousePoint(event.offsetX, event.offsetY))
+    document.querySelector('svg').addEventListener('click', this.addTrainingPoint.bind(this))
   }
 
   initCovarianceMatrix () {
-    for (let i = 0; i < this.steps; i++) {
-      this.covarianceMatrix[i] = new Array(this.steps) // initialize the two dimensional array
-    }
-
-    for (let i = 0; i < this.steps; i++) {
-      for (let j = i; j < this.steps; j++) {
-        const covariance = GaussianProcess.squaredExponentialKernel(this.testingPointsX[i], this.testingPointsX[j])
-        this.covarianceMatrix[i][j] = covariance
-        if (i !== j) {
-          this.covarianceMatrix[j][i] = covariance // symmetric matrix so we only need to calculate one triangle of the matrix
-        }
-      }
-    }
+    const dm = GaussianProcess.computeDistanceMatrix(this.testingPointsX, this.testingPointsX)
+    this.covarianceMatrix = GaussianProcess.squaredExponentialKernel(dm)
 
     console.log('Covariance Matrix: ', this.covarianceMatrix)
   }
 
-  initMeanAndInterval () {
-    const mu = numeric.rep([this.steps], 0)
-    const sd95 = numeric.mul(1.98, numeric.sqrt(numeric.getDiag(this.covarianceMatrix)));
-    this.graph.drawLine(mu)
-    this.graph.drawLine(sd95)
-    this.graph.drawLine(numeric.neg(sd95))
+  drawMeanAndInterval () {
+    this.graph.drawLine(this.mu)
+    this.graph.drawLine(numeric.add(this.mu, this.sd95))
+    this.graph.drawLine(numeric.sub(this.mu, this.sd95))
   }
 
-  sampleFromPrior () {
-    const svd = numeric.svd(this.covarianceMatrix)
-    const squareRootCovarianceMatrix = numeric.dot(svd.U, numeric.diag(numeric.sqrt(svd.S)))
-    const z = GaussianProcess.randomNormalArray(this.steps)
-    const dataY = numeric.dot(squareRootCovarianceMatrix, z)
+  sample () {
+      const z = GaussianProcess.randomNormalArray(this.steps)
+      const dataY = numeric.add(numeric.dot(this.proj, z), this.mu)
+      this.graph.drawLine(dataY, false, false, true)
+  }
 
-    this.graph.drawLine(dataY, false, false, true)
+  addTrainingPoint (event) {
+    const graphPoint = this.graph.toLocal(event.offsetX, event.offsetY)
+    this.trainingPointsX.push(graphPoint.x)
+    this.trainingPointsY.push(graphPoint.y)
 
-    console.log('Singular value decomposition: ', svd)
-    console.log('Square root of the covariance matrix: ', squareRootCovarianceMatrix)
-    console.log('z is an array of normally distributed values: ', z)
-    console.log('Data points y: ', dataY)
+    const dmTr = GaussianProcess.computeDistanceMatrix(this.trainingPointsX, this.trainingPointsX)
+    const dmTeTr = GaussianProcess.computeDistanceMatrix(this.testingPointsX, this.trainingPointsX)
+
+    this.computeProjection(dmTr, dmTeTr, this.trainingPointsY)
+    this.graph.drawPoint(graphPoint.x, graphPoint.y)
+    this.drawMeanAndInterval()
+    this.sample()
+  }
+
+  static computeDistanceMatrix (xData1, xData2) {
+    const distanceMatrix = GaussianProcess.initTwoDimensionalArray(xData1.length, xData2.length)
+
+    for (let i = 0; i < xData1.length; i++){
+      for (let j = 0; j < xData2.length; j++){
+        distanceMatrix[i][j] = Math.abs(xData2[j] - xData1[i])
+      }
+    }
+
+    return distanceMatrix
+  }
+
+  computeProjection(dmTr, dmTeTr, trY) {
+    const Mtr = numeric.dim(dmTr)[0]
+    const Mte = this.steps
+
+    if (Mtr > 0) {
+      const Kxx = GaussianProcess.squaredExponentialKernel(dmTr)
+
+      for (let i = 0; i < Mtr; i++){
+        Kxx[i][i] += 0.2;
+      }
+
+      const KxxSvd = numeric.svd(Kxx)
+
+      for (let i = 0; i < Mtr; i++){
+        if (KxxSvd.S[i] > numeric.epsilon){
+          KxxSvd.S[i] = 1.0/KxxSvd.S[i];
+        } else {
+          KxxSvd.S[i] = 0.0;
+        }
+      }
+
+      const Kx = GaussianProcess.squaredExponentialKernel(dmTeTr)
+
+      const tmp = numeric.dot(Kx, KxxSvd.U);
+
+      // there seems to be a bug in numeric.svd: svd1.U and transpose(svd1.V) are not always equal for a symmetric matrix
+      this.mu = numeric.dot(tmp, numeric.mul(KxxSvd.S, numeric.dot(numeric.transpose(KxxSvd.U), trY)));
+      let cov = numeric.dot(tmp, numeric.diag(numeric.sqrt(KxxSvd.S)));
+      cov = numeric.dot(cov, numeric.transpose(cov));
+      cov = numeric.sub(this.covarianceMatrix, cov);
+      const covSvd = numeric.svd(cov);
+      for (let i = 0; i < Mte; i++){
+        if (covSvd.S[i] < numeric.epsilon){
+          covSvd.S[i] = 0.0;
+        }
+      }
+      this.proj = numeric.dot(covSvd.U, numeric.diag(numeric.sqrt(covSvd.S)));
+      this.sd95 = numeric.mul(1.98, numeric.sqrt(numeric.getDiag(numeric.dot(this.proj, numeric.transpose(this.proj)))));
+
+    } else {
+      this.mu = numeric.rep([this.steps], 0)
+      this.sd95 = numeric.mul(1.98, numeric.sqrt(numeric.getDiag(this.covarianceMatrix)))
+      const covSvd = numeric.svd(this.covarianceMatrix)
+      this.proj = numeric.dot(covSvd.U, numeric.diag(numeric.sqrt(covSvd.S)))
+    }
+  }
+
+  static initTwoDimensionalArray(dim1, dim2) {
+    const array = new Array(dim1)
+    for (let i = 0; i < dim1; i++) {
+      array[i] = new Array(dim2)
+    }
+    return array
   }
 
   static randomNormalArray (size) {
@@ -70,10 +136,11 @@ class GaussianProcess {
     return zs
   }
 
-  static squaredExponentialKernel (x, y) {
+  static squaredExponentialKernel (distanceMatrix) {
     const l = 1
     const sigma = 1
-    return Math.pow(sigma, 2) * Math.exp(-0.5 * (Math.pow(x - y, 2) / Math.pow(l, 2)))
+    return numeric.mul(numeric.exp(numeric.mul(-0.5 / (Math.pow(l, 2)), numeric.pow(distanceMatrix, 2))),
+      Math.pow(sigma, 2))
   }
 }
 
@@ -117,10 +184,10 @@ class Graph {
     const dataSet = d3.range(data.length).map(function (i) { return {'y': data[i]} })
     const randomColor = randomColors ? 'hsl(' + Math.random() * 360 + ',100%,50%)' : '#ccc'
 
-    if (resetLines) {
-      this.lines.forEach(line => line.remove())
-      this.lineDots.forEach(dots => dots.remove())
-    }
+    // if (resetLines) {
+    //   this.lines.forEach(line => line.remove())
+    //   this.lineDots.forEach(dots => dots.remove())
+    // }
 
     const line = d3.line()
       .x((d, i) => { return this.xScale(linSpace[i]) })
@@ -148,20 +215,20 @@ class Graph {
     }
   }
 
-  drawMousePoint (x, y) {
+  toLocal(x, y) {
     // check bounds
     if (x < this.margin.left
       || x > this.margin.left + this.width
       || y < this.margin.top
       || y > this.margin.top + this.height) return
 
-    const xRange = Math.abs(this.xLeft) + Math.abs(this.xRight)
-    const yRange = Math.abs(this.yTop) + Math.abs(this.yBottom)
+    const xRange = Math.abs(this.xRight - this.xLeft)
+    const yRange = Math.abs(this.yBottom - this.yTop)
 
     const newX = (x - this.margin.left) / this.width * xRange + this.xLeft
     const newY = -((y - this.margin.top) / this.height * yRange + this.yBottom)
 
-    this.drawPoint(newX, newY)
+    return { x: newX, y: newY }
   }
 
   drawPoint (x, y) {
