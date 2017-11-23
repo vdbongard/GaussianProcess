@@ -7,12 +7,14 @@ class GaussianProcess {
     this.yBottom = -3
     this.covarianceMatrix = new Array(this.steps)
     this.graph = new Graph(this.xLeft, this.xRight, this.yTop, this.yBottom)
+    this.testingPointsX = numeric.linspace(this.xLeft, this.xRight, this.steps)
 
     this.init()
   }
 
   init () {
     this.initCovarianceMatrix()
+    this.initMeanAndInterval()
     this.sampleFromPrior()
 
     d3.select('body').append('button').text('Sample').on('click', () => this.sampleFromPrior())
@@ -21,15 +23,13 @@ class GaussianProcess {
   }
 
   initCovarianceMatrix () {
-    const range = Math.abs(this.xLeft) + Math.abs(this.xRight)
-
     for (let i = 0; i < this.steps; i++) {
       this.covarianceMatrix[i] = new Array(this.steps) // initialize the two dimensional array
     }
 
     for (let i = 0; i < this.steps; i++) {
       for (let j = i; j < this.steps; j++) {
-        const covariance = GaussianProcess.squaredExponentialKernel(i / (this.steps - 1) * range + this.xLeft, j / (this.steps - 1) * range + this.xLeft)
+        const covariance = GaussianProcess.squaredExponentialKernel(this.testingPointsX[i], this.testingPointsX[j])
         this.covarianceMatrix[i][j] = covariance
         if (i !== j) {
           this.covarianceMatrix[j][i] = covariance // symmetric matrix so we only need to calculate one triangle of the matrix
@@ -40,13 +40,21 @@ class GaussianProcess {
     console.log('Covariance Matrix: ', this.covarianceMatrix)
   }
 
+  initMeanAndInterval () {
+    const mu = numeric.rep([this.steps], 0)
+    const sd95 = numeric.mul(1.98, numeric.sqrt(numeric.getDiag(this.covarianceMatrix)));
+    this.graph.drawLine(mu)
+    this.graph.drawLine(sd95)
+    this.graph.drawLine(numeric.neg(sd95))
+  }
+
   sampleFromPrior () {
     const svd = numeric.svd(this.covarianceMatrix)
     const squareRootCovarianceMatrix = numeric.dot(svd.U, numeric.diag(numeric.sqrt(svd.S)))
     const z = GaussianProcess.randomNormalArray(this.steps)
     const dataY = numeric.dot(squareRootCovarianceMatrix, z)
 
-    this.graph.drawLine(dataY, false, true)
+    this.graph.drawLine(dataY, false, false, true)
 
     console.log('Singular value decomposition: ', svd)
     console.log('Square root of the covariance matrix: ', squareRootCovarianceMatrix)
@@ -77,10 +85,8 @@ class Graph {
     this.height = window.innerHeight / 2 - this.margin.top - this.margin.bottom
     this.xLeft = xLeft
     this.xRight = xRight
-    this.xRange = Math.abs(this.xLeft) + Math.abs(this.xRight)
     this.yTop = yTop
     this.yBottom = yBottom
-    this.yRange = Math.abs(this.yTop) + Math.abs(this.yBottom)
     this.xScale = d3.scaleLinear().domain([this.xLeft, this.xRight]).range([0, this.width])
     this.yScale = d3.scaleLinear().domain([this.yBottom, this.yTop]).range([this.height, 0])
     this.svg = d3.select('body').append('svg')
@@ -106,11 +112,10 @@ class Graph {
       .call(d3.axisLeft(this.yScale))
   }
 
-  drawLine (data, showDots, resetLines) {
-    const n = data.length
-    const range = Math.abs(this.xLeft) + Math.abs(this.xRight)
-    const dataSet = d3.range(n).map(function (i) { return {'y': data[i]} })
-    const randomColor = 'hsl(' + Math.random() * 360 + ',100%,50%)'
+  drawLine (data, showDots, resetLines, randomColors) {
+    const linSpace = numeric.linspace(this.xLeft, this.xRight, data.length)
+    const dataSet = d3.range(data.length).map(function (i) { return {'y': data[i]} })
+    const randomColor = randomColors ? 'hsl(' + Math.random() * 360 + ',100%,50%)' : '#ccc'
 
     if (resetLines) {
       this.lines.forEach(line => line.remove())
@@ -118,7 +123,7 @@ class Graph {
     }
 
     const line = d3.line()
-      .x((d, i) => { return this.xScale(i / (n - 1) * range + this.xLeft) })
+      .x((d, i) => { return this.xScale(linSpace[i]) })
       .y((d) => { return this.yScale(d.y) })
 
     this.lines.push(
@@ -135,7 +140,7 @@ class Graph {
           .data(dataSet)
           .enter().append('circle')
           .attr('class', 'dot')
-          .attr('cx', (d, i) => { return this.xScale(i / (n - 1) * range + this.xLeft) })
+          .attr('cx', (d, i) => { return this.xScale(linSpace[i]) })
           .attr('cy', (d) => { return this.yScale(d.y) })
           .attr('r', 3)
           .attr('fill', randomColor)
@@ -150,8 +155,11 @@ class Graph {
       || y < this.margin.top
       || y > this.margin.top + this.height) return
 
-    const newX = (x - this.margin.left) / this.width * this.xRange + this.xLeft
-    const newY = -((y - this.margin.top) / this.height * this.yRange + this.yBottom)
+    const xRange = Math.abs(this.xLeft) + Math.abs(this.xRight)
+    const yRange = Math.abs(this.yTop) + Math.abs(this.yBottom)
+
+    const newX = (x - this.margin.left) / this.width * xRange + this.xLeft
+    const newY = -((y - this.margin.top) / this.height * yRange + this.yBottom)
 
     this.drawPoint(newX, newY)
   }
