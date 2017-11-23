@@ -49,16 +49,19 @@ class GaussianProcess {
 
   addTrainingPoint (event) {
     const graphPoint = this.graph.toLocal(event.offsetX, event.offsetY)
-    this.trainingPointsX.push(graphPoint.x)
-    this.trainingPointsY.push(graphPoint.y)
 
-    const dmTr = GaussianProcess.computeDistanceMatrix(this.trainingPointsX, this.trainingPointsX)
-    const dmTeTr = GaussianProcess.computeDistanceMatrix(this.testingPointsX, this.trainingPointsX)
+    if (graphPoint) {
+      this.trainingPointsX.push(graphPoint.x)
+      this.trainingPointsY.push(graphPoint.y)
 
-    this.computeProjection(dmTr, dmTeTr, this.trainingPointsY)
-    this.graph.drawPoint(graphPoint.x, graphPoint.y)
-    this.drawMeanAndInterval()
-    this.sample()
+      const dmTr = GaussianProcess.computeDistanceMatrix(this.trainingPointsX, this.trainingPointsX)
+      const dmTeTr = GaussianProcess.computeDistanceMatrix(this.testingPointsX, this.trainingPointsX)
+
+      this.computeProjection(dmTr, dmTeTr, this.trainingPointsY)
+      this.graph.drawPoint(graphPoint.x, graphPoint.y)
+      this.drawMeanAndInterval()
+      this.sample()
+    }
   }
 
   static computeDistanceMatrix (xData1, xData2) {
