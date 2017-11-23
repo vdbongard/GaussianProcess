@@ -1,61 +1,80 @@
-function randnArray (size) {
-  const zs = new Array(size)
-  for (let i = 0; i < size; i++) {
-    zs[i] = d3.randomNormal()()
+class GaussianProcess {
+  constructor () {
+    this.steps = 200
+    this.xLeft = -5
+    this.xRight = 5
+    this.yTop = 3
+    this.yBottom = -3
+    this.covarianceMatrix = new Array(this.steps)
+    this.graph = new Graph(this.xLeft, this.xRight, this.yTop, this.yBottom)
+
+    this.init()
   }
-  return zs
-}
 
-function squaredExponentialKernel (x, y) {
-  const l = 1
-  const sigma = 1
-  return Math.pow(sigma, 2) * Math.exp(-0.5 * (Math.pow(x - y, 2) / Math.pow(l, 2)))
-}
+  init () {
+    this.initCovarianceMatrix()
+    this.sampleFromPrior()
 
-const steps = 200
-const covarianceMatrix = new Array(steps)
-const xLeft = -5
-const xRight = 5
-const range = Math.abs(xLeft) + Math.abs(xRight)
+    d3.select('body').append('button').text('Sample').on('click', () => this.sampleFromPrior())
 
-for (let i = 0; i < steps; i++) {
-  covarianceMatrix[i] = new Array(steps) // initialize the two dimensional array
-}
+    document.querySelector('svg').addEventListener('click', (event) => this.graph.drawMousePoint(event.offsetX, event.offsetY))
+  }
 
-for (let i = 0; i < steps; i++) {
-  for (let j = i; j < steps; j++) {
-    const covariance = squaredExponentialKernel(i / (steps - 1) * range + xLeft, j / (steps - 1) * range + xLeft)
-    covarianceMatrix[i][j] = covariance
-    if (i !== j) {
-      covarianceMatrix[j][i] = covariance // symmetric matrix so we only need to calculate one triangle of the matrix
+  initCovarianceMatrix () {
+    const range = Math.abs(this.xLeft) + Math.abs(this.xRight)
+
+    for (let i = 0; i < this.steps; i++) {
+      this.covarianceMatrix[i] = new Array(this.steps) // initialize the two dimensional array
     }
+
+    for (let i = 0; i < this.steps; i++) {
+      for (let j = i; j < this.steps; j++) {
+        const covariance = GaussianProcess.squaredExponentialKernel(i / (this.steps - 1) * range + this.xLeft, j / (this.steps - 1) * range + this.xLeft)
+        this.covarianceMatrix[i][j] = covariance
+        if (i !== j) {
+          this.covarianceMatrix[j][i] = covariance // symmetric matrix so we only need to calculate one triangle of the matrix
+        }
+      }
+    }
+
+    console.log('Covariance Matrix: ', this.covarianceMatrix)
+  }
+
+  sampleFromPrior () {
+    const svd = numeric.svd(this.covarianceMatrix)
+    const squareRootCovarianceMatrix = numeric.dot(svd.U, numeric.diag(numeric.sqrt(svd.S)))
+    const z = GaussianProcess.randomNormalArray(this.steps)
+    const dataY = numeric.dot(squareRootCovarianceMatrix, z)
+
+    this.graph.drawLine(dataY, false, true)
+
+    console.log('Singular value decomposition: ', svd)
+    console.log('Square root of the covariance matrix: ', squareRootCovarianceMatrix)
+    console.log('z is an array of normally distributed values: ', z)
+    console.log('Data points y: ', dataY)
+  }
+
+  static randomNormalArray (size) {
+    const zs = new Array(size)
+    for (let i = 0; i < size; i++) {
+      zs[i] = d3.randomNormal()()
+    }
+    return zs
+  }
+
+  static squaredExponentialKernel (x, y) {
+    const l = 1
+    const sigma = 1
+    return Math.pow(sigma, 2) * Math.exp(-0.5 * (Math.pow(x - y, 2) / Math.pow(l, 2)))
   }
 }
-
-console.log('Covariance Matrix: ', covarianceMatrix)
-
-const svd = numeric.svd(covarianceMatrix)
-
-console.log('Singular value decomposition: ', svd)
-
-const squareRootCovarianceMatrix = numeric.dot(svd.U, numeric.diag(numeric.sqrt(svd.S)))
-
-console.log('Square root of the covariance matrix: ', squareRootCovarianceMatrix)
-
-const z = randnArray(steps)
-
-console.log('z is an array of normally distributed values: ', z)
-
-const dataY = numeric.dot(squareRootCovarianceMatrix, z)
-
-console.log('Data points y: ', dataY)
 
 class Graph {
   constructor (xLeft, xRight, yTop, yBottom) {
     this.marginAll = 50
     this.margin = {top: this.marginAll, right: this.marginAll, bottom: this.marginAll, left: this.marginAll}
     this.width = window.innerWidth - this.margin.left - this.margin.right
-    this.height = window.innerHeight - this.margin.top - this.margin.bottom
+    this.height = window.innerHeight / 2 - this.margin.top - this.margin.bottom
     this.xLeft = xLeft
     this.xRight = xRight
     this.xRange = Math.abs(this.xLeft) + Math.abs(this.xRight)
@@ -69,6 +88,9 @@ class Graph {
       .attr('height', this.height + this.margin.top + this.margin.bottom)
       .append('g')
       .attr('transform', 'translate(' + this.margin.left + ',' + this.margin.top + ')')
+
+    this.lines = []
+    this.lineDots = []
 
     this.init()
   }
@@ -84,28 +106,40 @@ class Graph {
       .call(d3.axisLeft(this.yScale))
   }
 
-  drawLine (data, xLeft, xRight, showDots) {
+  drawLine (data, showDots, resetLines) {
     const n = data.length
-    const range = Math.abs(xLeft) + Math.abs(xRight)
+    const range = Math.abs(this.xLeft) + Math.abs(this.xRight)
     const dataSet = d3.range(n).map(function (i) { return {'y': data[i]} })
+    const randomColor = 'hsl(' + Math.random() * 360 + ',100%,50%)'
+
+    if (resetLines) {
+      this.lines.forEach(line => line.remove())
+      this.lineDots.forEach(dots => dots.remove())
+    }
 
     const line = d3.line()
-      .x((d, i) => { return this.xScale(i / (n - 1) * range + xLeft) })
+      .x((d, i) => { return this.xScale(i / (n - 1) * range + this.xLeft) })
       .y((d) => { return this.yScale(d.y) })
 
-    this.svg.append('path')
-      .datum(dataSet)
-      .attr('class', 'line')
-      .attr('d', line)
+    this.lines.push(
+      this.svg.append('path')
+        .datum(dataSet)
+        .attr('class', 'line')
+        .attr('stroke', randomColor)
+        .attr('d', line)
+    )
 
     if (showDots) {
-      this.svg.selectAll('.dot')
-        .data(dataSet)
-        .enter().append('circle')
-        .attr('class', 'dot')
-        .attr('cx', (d, i) => { return this.xScale(i / (n - 1) * range + xLeft) })
-        .attr('cy', (d) => { return this.yScale(d.y) })
-        .attr('r', 5)
+      this.lineDots.push(
+        this.svg.selectAll('.dot')
+          .data(dataSet)
+          .enter().append('circle')
+          .attr('class', 'dot')
+          .attr('cx', (d, i) => { return this.xScale(i / (n - 1) * range + this.xLeft) })
+          .attr('cy', (d) => { return this.yScale(d.y) })
+          .attr('r', 3)
+          .attr('fill', randomColor)
+      )
     }
   }
 
@@ -130,11 +164,8 @@ class Graph {
       .attr('cx', (d) => { return this.xScale(d.x) })
       .attr('cy', (d) => { return this.yScale(d.y) })
       .attr('r', 4)
+      .attr('fill', '#7eff00')
   }
 }
 
-const graph = new Graph(xLeft, xRight, 3, -3)
-
-graph.drawLine(dataY, xLeft, xRight, true)
-
-document.querySelector('svg').addEventListener('click', (event) => graph.drawMousePoint(event.offsetX, event.offsetY))
+new GaussianProcess()
