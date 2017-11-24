@@ -2,7 +2,17 @@ body {
 	margin: 0;
 }
 
-.line {
+.sample-line {
     fill: none;
     stroke-width: 2;
+}
+
+.mean-line {
+    fill: none;
+    stroke: #999;
+    stroke-width: 2;
+}
+
+.sd95-area {
+    fill: #f2f2f2;
 }
