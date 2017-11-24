@@ -56,18 +56,6 @@ class GaussianProcess {
     }
   }
 
-  static computeDistanceMatrix (xData1, xData2) {
-    const distanceMatrix = GaussianProcess.initTwoDimensionalArray(xData1.length, xData2.length)
-
-    for (let i = 0; i < xData1.length; i++) {
-      for (let j = 0; j < xData2.length; j++) {
-        distanceMatrix[i][j] = Math.abs(xData2[j] - xData1[i])
-      }
-    }
-
-    return distanceMatrix
-  }
-
   computeProjection (dmTr, dmTeTr, trY) {
     const Mtr = numeric.dim(dmTr)[0]
     const Mte = this.steps
@@ -112,9 +100,21 @@ class GaussianProcess {
     } else {
       this.mu = numeric.rep([this.steps], 0)
       this.sd95 = numeric.mul(1.98, numeric.sqrt(numeric.getDiag(this.covarianceMatrix)))
-      const covSvd = numeric.svd(this.covarianceMatrix)
-      this.proj = numeric.dot(covSvd.U, numeric.diag(numeric.sqrt(covSvd.S)))
+      const svdCov = numeric.svd(this.covarianceMatrix)
+      this.proj = numeric.dot(svdCov.U, numeric.diag(numeric.sqrt(svdCov.S)))
     }
+  }
+
+  static computeDistanceMatrix (xData1, xData2) {
+    const distanceMatrix = GaussianProcess.initTwoDimensionalArray(xData1.length, xData2.length)
+
+    for (let i = 0; i < xData1.length; i++) {
+      for (let j = 0; j < xData2.length; j++) {
+        distanceMatrix[i][j] = Math.abs(xData2[j] - xData1[i])
+      }
+    }
+
+    return distanceMatrix
   }
 
   static initTwoDimensionalArray (dim1, dim2) {
