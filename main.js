@@ -5,6 +5,7 @@ class GaussianProcess {
     this.xRight = 5
     this.yTop = 3
     this.yBottom = -3
+    this.noise = 0.02
     this.covarianceMatrix = []
     this.graph = new Graph(this.xLeft, this.xRight, this.yTop, this.yBottom, this.steps)
     this.testingPointsX = numeric.linspace(this.xLeft, this.xRight, this.steps)
@@ -64,7 +65,7 @@ class GaussianProcess {
       const kxx = GaussianProcess.squaredExponentialKernel(dmTr)
 
       for (let i = 0; i < Mtr; i++) {
-        kxx[i][i] += 0.2
+        kxx[i][i] += this.noise
       }
 
       const svdKxx = numeric.svd(kxx)
@@ -146,7 +147,7 @@ class Graph {
     this.marginAll = 50
     this.margin = {top: this.marginAll, right: this.marginAll, bottom: this.marginAll, left: this.marginAll}
     this.width = window.innerWidth - this.margin.left - this.margin.right
-    this.height = window.innerHeight / 2 - this.margin.top - this.margin.bottom
+    this.height = window.innerHeight * 0.75 - this.margin.top - this.margin.bottom
     this.xLeft = xLeft
     this.xRight = xRight
     this.yTop = yTop
