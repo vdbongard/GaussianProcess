@@ -20,7 +20,7 @@ class GaussianProcess {
 
   init () {
     this.initCovarianceMatrix()
-    this.computeProjection()
+    this.initMeanAndInterval()
     this.graph.drawMeanAndInterval(this.mu, this.sd95)
     this.sample()
 
@@ -48,62 +48,37 @@ class GaussianProcess {
       this.trainingPointsX.push(graphPoint.x)
       this.trainingPointsY.push(graphPoint.y)
 
-      const dmTr = GaussianProcess.computeDistanceMatrix(this.trainingPointsX, this.trainingPointsX)
-      const dmTeTr = GaussianProcess.computeDistanceMatrix(this.testingPointsX, this.trainingPointsX)
+      this.computeMeanAndInterval()
 
-      this.computeProjection(dmTr, dmTeTr, this.trainingPointsY)
       this.graph.drawPoint(graphPoint.x, graphPoint.y)
       this.graph.drawMeanAndInterval(this.mu, this.sd95)
     }
   }
 
-  computeProjection (dmTr, dmTeTr, trY) {
-    const Mtr = numeric.dim(dmTr)[0]
-    const Mte = this.steps
+  initMeanAndInterval () {
+    const svdCov = numeric.svd(this.covarianceMatrix)
+    this.mu = numeric.rep([this.steps], 0)
+    this.sd95 = numeric.mul(1.98, numeric.sqrt(numeric.getDiag(this.covarianceMatrix)))
+    this.proj = numeric.dot(svdCov.U, numeric.diag(numeric.sqrt(svdCov.S)))
+  }
 
-    if (Mtr > 0) {
-      const kxx = GaussianProcess.squaredExponentialKernel(dmTr)
+  computeMeanAndInterval () {
+    const kx = GaussianProcess.squaredExponentialKernel(
+      GaussianProcess.computeDistanceMatrix(this.trainingPointsX, numeric.linspace(this.xLeft, this.xRight, this.steps))
+    )
+    const kxTranspose = numeric.transpose(kx)
+    const covTr = GaussianProcess.squaredExponentialKernel(
+      GaussianProcess.computeDistanceMatrix(this.trainingPointsX, this.trainingPointsX)
+    )
+    const k = numeric.add(covTr, numeric.diag(numeric.rep([covTr.length], this.noise)))
+    const kInverse = numeric.inv(k)
+    const kxTranspose_x_kInverse = numeric.dot(kxTranspose, kInverse)
+    const posteriorCov = numeric.sub(this.covarianceMatrix, numeric.dot(kxTranspose_x_kInverse, kx))
+    const svdTmp = numeric.svd(posteriorCov)
 
-      for (let i = 0; i < Mtr; i++) {
-        kxx[i][i] += this.noise
-      }
-
-      const svdKxx = numeric.svd(kxx)
-
-      for (let i = 0; i < Mtr; i++) {
-        if (svdKxx.S[i] > numeric.epsilon) {
-          svdKxx.S[i] = 1.0 / svdKxx.S[i]
-        } else {
-          svdKxx.S[i] = 0.0
-        }
-      }
-
-      const kx = GaussianProcess.squaredExponentialKernel(dmTeTr)
-
-      const tmp = numeric.dot(kx, svdKxx.U)
-
-      this.mu = numeric.dot(tmp, numeric.mul(svdKxx.S, numeric.dot(numeric.transpose(svdKxx.U), trY)))
-
-      let cov = numeric.dot(tmp, numeric.diag(numeric.sqrt(svdKxx.S)))
-      cov = numeric.dot(cov, numeric.transpose(cov))
-      cov = numeric.sub(this.covarianceMatrix, cov)
-
-      const svdCov = numeric.svd(cov)
-
-      for (let i = 0; i < Mte; i++) {
-        if (svdCov.S[i] < numeric.epsilon) {
-          svdCov.S[i] = 0.0
-        }
-      }
-
-      this.proj = numeric.dot(svdCov.U, numeric.diag(numeric.sqrt(svdCov.S)))
-      this.sd95 = numeric.mul(1.98, numeric.sqrt(numeric.getDiag(numeric.dot(this.proj, numeric.transpose(this.proj)))))
-    } else {
-      this.mu = numeric.rep([this.steps], 0)
-      this.sd95 = numeric.mul(1.98, numeric.sqrt(numeric.getDiag(this.covarianceMatrix)))
-      const svdCov = numeric.svd(this.covarianceMatrix)
-      this.proj = numeric.dot(svdCov.U, numeric.diag(numeric.sqrt(svdCov.S)))
-    }
+    this.mu = numeric.dot(kxTranspose_x_kInverse, this.trainingPointsY)
+    this.sd95 = numeric.mul(1.98, numeric.sqrt(numeric.getDiag(posteriorCov)))
+    this.proj = numeric.dot(svdTmp.U, numeric.diag(numeric.sqrt(svdTmp.S)))
   }
 
   static computeDistanceMatrix (xData1, xData2) {
